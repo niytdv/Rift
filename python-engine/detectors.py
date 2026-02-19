@@ -1,77 +1,177 @@
 import networkx as nx
-import pandas as pd
+from datetime import timedelta
 from collections import defaultdict
 
-def detect_shared_ip(G):
-    patterns = defaultdict(list)
-    ip_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'ip']
+def detect_cycles(G, max_length=5, time_window_hours=72):
+    """
+    Detect cycles where all transactions occur within 72 hours.
     
-    for ip_node in ip_nodes:
-        accounts = [n for n in G.predecessors(ip_node)]
-        if len(accounts) > 1:
-            for acc in accounts:
-                patterns[acc].append(f"shared_ip:{ip_node}")
+    Returns:
+        cycle_nodes: set of nodes involved in cycles
+        cycle_groups: list of cycle node lists
+    """
+    cycle_nodes = set()
+    cycle_groups = []
     
-    return patterns
+    try:
+        cycles = list(nx.simple_cycles(G))
+    except:
+        return cycle_nodes, cycle_groups
+    
+    for cycle in cycles:
+        if len(cycle) > max_length:
+            continue
+        
+        # Get all edges in the cycle
+        edges = []
+        for i in range(len(cycle)):
+            src = cycle[i]
+            dst = cycle[(i + 1) % len(cycle)]
+            
+            if G.has_edge(src, dst):
+                edge_data = G[src][dst]
+                edges.append(edge_data)
+        
+        if not edges:
+            continue
+        
+        # Check temporal constraint
+        timestamps = [edge['timestamp'] for edge in edges]
+        time_span = max(timestamps) - min(timestamps)
+        
+        if time_span <= timedelta(hours=time_window_hours):
+            cycle_nodes.update(cycle)
+            cycle_groups.append(list(cycle))
+    
+    return cycle_nodes, cycle_groups
 
-def detect_shared_device(G):
-    patterns = defaultdict(list)
-    device_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'device']
+def detect_velocity(G, pass_through_threshold=0.85, avg_time_hours=24):
+    """
+    Detect high-velocity pass-through accounts.
     
-    for device_node in device_nodes:
-        accounts = [n for n in G.predecessors(device_node)]
-        if len(accounts) > 1:
-            for acc in accounts:
-                patterns[acc].append(f"shared_device:{device_node}")
+    Criteria:
+    - pass_through_rate = total_out / total_in > 0.85
+    - Average time between receive and send < 24 hours
     
-    return patterns
+    Returns:
+        velocity_nodes: set of flagged nodes
+    """
+    velocity_nodes = set()
+    
+    for node in G.nodes():
+        # Calculate total in and out
+        total_in = sum(G[pred][node]['amount'] for pred in G.predecessors(node))
+        total_out = sum(G[node][succ]['amount'] for succ in G.successors(node))
+        
+        if total_in == 0:
+            continue
+        
+        pass_through_rate = total_out / total_in
+        
+        if pass_through_rate <= pass_through_threshold:
+            continue
+        
+        # Calculate average time between receive and send
+        in_times = [G[pred][node]['timestamp'] for pred in G.predecessors(node)]
+        out_times = [G[node][succ]['timestamp'] for succ in G.successors(node)]
+        
+        if not in_times or not out_times:
+            continue
+        
+        # Average time from first receive to first send
+        time_diffs = []
+        for in_time in in_times:
+            for out_time in out_times:
+                if out_time > in_time:
+                    time_diffs.append((out_time - in_time).total_seconds() / 3600)
+        
+        if time_diffs:
+            avg_time = sum(time_diffs) / len(time_diffs)
+            if avg_time < avg_time_hours:
+                velocity_nodes.add(node)
+    
+    return velocity_nodes
 
-def detect_shared_bank(G):
-    patterns = defaultdict(list)
-    bank_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'bank']
+def detect_peel_chains(G, min_length=3, time_window_hours=12):
+    """
+    Detect peel chains with strict amount decay.
     
-    for bank_node in bank_nodes:
-        accounts = [n for n in G.predecessors(bank_node)]
-        if len(accounts) > 1:
-            for acc in accounts:
-                patterns[acc].append(f"shared_bank:{bank_node}")
+    Criteria:
+    - Path length >= 3
+    - Strict amount decay (each hop < previous)
+    - Time between hops < 12 hours
     
-    return patterns
+    Returns:
+        peel_nodes: set of nodes in peel chains
+        peel_groups: list of peel chain paths
+    """
+    peel_nodes = set()
+    peel_groups = []
+    
+    # Find all simple paths up to reasonable length
+    for source in G.nodes():
+        for target in G.nodes():
+            if source == target:
+                continue
+            
+            try:
+                paths = list(nx.all_simple_paths(G, source, target, cutoff=10))
+            except:
+                continue
+            
+            for path in paths:
+                if len(path) < min_length:
+                    continue
+                
+                # Check amount decay and time constraints
+                is_valid_peel = True
+                prev_amount = None
+                prev_time = None
+                
+                for i in range(len(path) - 1):
+                    src = path[i]
+                    dst = path[i + 1]
+                    
+                    edge_data = G[src][dst]
+                    amount = edge_data['amount']
+                    timestamp = edge_data['timestamp']
+                    
+                    # Check strict amount decay
+                    if prev_amount is not None and amount >= prev_amount:
+                        is_valid_peel = False
+                        break
+                    
+                    # Check time window
+                    if prev_time is not None:
+                        time_diff = (timestamp - prev_time).total_seconds() / 3600
+                        if time_diff >= time_window_hours:
+                            is_valid_peel = False
+                            break
+                    
+                    prev_amount = amount
+                    prev_time = timestamp
+                
+                if is_valid_peel:
+                    peel_nodes.update(path)
+                    peel_groups.append(path)
+    
+    return peel_nodes, peel_groups
 
-def detect_rapid_creation(df):
-    patterns = defaultdict(list)
-    df['created_at'] = pd.to_datetime(df['created_at'])
-    df_sorted = df.sort_values('created_at')
+def detect_all_patterns(G):
+    """
+    Run all detection algorithms on the graph.
     
-    for i in range(len(df_sorted) - 1):
-        time_diff = (df_sorted.iloc[i + 1]['created_at'] - df_sorted.iloc[i]['created_at']).total_seconds()
-        if time_diff < 300:  # 5 minutes
-            patterns[df_sorted.iloc[i]['account_id']].append('rapid_creation')
-            patterns[df_sorted.iloc[i + 1]['account_id']].append('rapid_creation')
+    Returns:
+        Dictionary with all detection results
+    """
+    cycle_nodes, cycle_groups = detect_cycles(G)
+    velocity_nodes = detect_velocity(G)
+    peel_nodes, peel_groups = detect_peel_chains(G)
     
-    return patterns
-
-def detect_velocity(df):
-    patterns = defaultdict(list)
-    
-    for account_id in df['account_id'].unique():
-        acc_txns = df[df['account_id'] == account_id]
-        if len(acc_txns) > 10:
-            patterns[account_id].append('high_velocity')
-    
-    return patterns
-
-def detect_all_patterns(G, df):
-    all_patterns = defaultdict(list)
-    
-    for pattern_dict in [
-        detect_shared_ip(G),
-        detect_shared_device(G),
-        detect_shared_bank(G),
-        detect_rapid_creation(df),
-        detect_velocity(df)
-    ]:
-        for acc, patterns in pattern_dict.items():
-            all_patterns[acc].extend(patterns)
-    
-    return all_patterns
+    return {
+        "cycle_nodes": cycle_nodes,
+        "velocity_nodes": velocity_nodes,
+        "peel_nodes": peel_nodes,
+        "cycle_groups": cycle_groups,
+        "peel_groups": peel_groups
+    }

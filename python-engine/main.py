@@ -1,10 +1,6 @@
 import sys
-import time
-from graph_builder import build_graph
+from graph_builder import build_graph, prune_isolated_nodes
 from detectors import detect_all_patterns
-from scoring import calculate_scores
-from ring_grouper import group_rings
-from output import generate_json_output
 
 def main():
     if len(sys.argv) < 2:
@@ -12,17 +8,22 @@ def main():
         sys.exit(1)
 
     csv_path = sys.argv[1]
-    start_time = time.time()
-
-    graph, df = build_graph(csv_path)
-    patterns = detect_all_patterns(graph, df)
-    accounts = calculate_scores(df, patterns)
-    rings = group_rings(accounts, patterns)
     
-    processing_time = int((time.time() - start_time) * 1000)
-    output = generate_json_output(accounts, rings, graph, processing_time)
+    # Build graph
+    G, df = build_graph(csv_path)
     
-    print(output)
+    # Prune isolated nodes
+    G = prune_isolated_nodes(G)
+    
+    # Run detection algorithms
+    results = detect_all_patterns(G)
+    
+    # Output results (can be formatted as needed)
+    print(f"Cycle nodes: {len(results['cycle_nodes'])}")
+    print(f"Velocity nodes: {len(results['velocity_nodes'])}")
+    print(f"Peel nodes: {len(results['peel_nodes'])}")
+    print(f"Cycle groups: {len(results['cycle_groups'])}")
+    print(f"Peel groups: {len(results['peel_groups'])}")
 
 if __name__ == "__main__":
     main()
