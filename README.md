@@ -1,10 +1,10 @@
-# Money Mule Detector
+# MuleRift
 
-A fraud detection system that analyzes transaction data to identify money mule networks and fraud rings using graph analysis and pattern detection.
+A graph-based financial intelligence tool that detects money muling patterns from transaction data using cycle detection and temporal velocity analysis.
 
 ## Live Demo
 
-Upload your CSV file or run the sample data to see fraud rings detected in real-time.
+Upload your transaction CSV file or run the sample data to see suspicious rings detected in real-time.
 
 ## Tech Stack
 
@@ -15,15 +15,13 @@ Upload your CSV file or run the sample data to see fraud rings detected in real-
 
 ## Detection Algorithms
 
-The system identifies fraud patterns through:
+MuleRift models transactions as a directed graph where accounts are nodes and transactions are directed edges. The system identifies suspicious patterns through:
 
-1. **Shared IP Detection** - Multiple accounts using the same IP address
-2. **Shared Device Detection** - Multiple accounts on the same device
-3. **Shared Bank Account** - Multiple accounts linked to one bank account
-4. **Rapid Account Creation** - Accounts created within 5 minutes of each other
-5. **High Velocity Transactions** - Accounts with >10 transactions
+1. **Cycle Detection** - Identifies rings where funds flow through multiple accounts and return to the origin (A → B → C → A)
+2. **Temporal Velocity Analysis** - Detects rapid pass-through transactions where funds move through an account within 72 hours
+3. **Suspicion Scoring** - Combines structural (cycle participation) and temporal (velocity) signals into a weighted score (0-100)
 
-Each pattern contributes to a fraud score (0-100), and accounts are grouped into rings based on shared entities.
+Each cycle becomes a "ring" with an aggregated suspicion score based on member account behavior.
 
 ## Setup
 
@@ -50,12 +48,10 @@ Visit `http://localhost:3000` to use the application.
 ## CSV Format
 
 Your CSV should include these columns:
-- `account_id` - Unique account identifier
-- `ip_address` - IP address used
-- `device_id` - Device identifier
-- `bank_account` - Bank account number
-- `created_at` - Account creation timestamp
-- `transaction_count` - Number of transactions
+- `from_account` - Source account identifier
+- `to_account` - Destination account identifier
+- `amount` - Transaction amount (numeric)
+- `timestamp` - Transaction timestamp (ISO 8601 format)
 
 ## API Endpoints
 
@@ -67,11 +63,11 @@ Your CSV should include these columns:
 ## Project Structure
 
 ```
-money-mule-detector/
+mulerift/
 ├── app/                    # Next.js App Router
 ├── components/             # React components
 ├── lib/                    # TypeScript utilities
-├── python-engine/          # Python fraud detection engine
+├── python-engine/          # Python graph analysis engine
 ├── public/                 # Static assets
 └── README.md
 ```

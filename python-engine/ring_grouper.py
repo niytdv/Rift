@@ -1,38 +1,56 @@
-from collections import defaultdict
-
 def group_rings(accounts, patterns):
-    rings = defaultdict(lambda: {'members': [], 'pattern': '', 'scores': []})
+    """Group detected cycles into fraud rings matching Locked Data Contract.
     
-    shared_entities = defaultdict(list)
-    for acc in accounts:
-        for pattern in acc['patterns']:
-            if ':' in pattern:
-                entity = pattern.split(':', 1)[1]
-                shared_entities[entity].append(acc['account_id'])
+    Contract requirements:
+    - ring_id format: 'RING_00X'
+    - pattern_type: 'cycle' (for transaction cycles)
+    - risk_score: average of member suspicion scores
     
-    ring_id = 1
-    for entity, members in shared_entities.items():
-        if len(members) > 1:
-            ring_key = f"RING_{ring_id:03d}"
-            pattern_type = entity.split('_')[0]
-            
-            rings[ring_key]['members'] = members
-            rings[ring_key]['pattern'] = pattern_type
-            
-            for acc in accounts:
-                if acc['account_id'] in members:
-                    rings[ring_key]['scores'].append(acc['fraud_score'])
-                    acc['ring_id'] = ring_key
-            
-            ring_id += 1
+    Returns: List of ring dicts matching contract schema
+    """
+    rings = []
+    cycles = patterns['cycles']
     
-    result = []
-    for ring_id, data in rings.items():
-        result.append({
+    for idx, cycle in enumerate(cycles, 1):
+        ring_id = f"RING_{idx:03d}"
+        
+        # Get scores for accounts in this cycle
+        member_scores = []
+        for acc in accounts:
+            if acc['account_id'] in cycle:
+                member_scores.append(acc['suspicion_score'])
+        
+        # Calculate ring risk score (average of member scores)
+        risk_score = sum(member_scores) / len(member_scores) if member_scores else 0
+        
+        # Determine pattern type (currently only 'cycle' is detected)
+        # Future: add 'smurfing' and 'shell' detection
+        pattern_type = 'cycle'
+        
+        rings.append({
             'ring_id': ring_id,
-            'pattern': data['pattern'],
-            'members': data['members'],
-            'avg_score': sum(data['scores']) / len(data['scores']) if data['scores'] else 0
+            'member_accounts': cycle,
+            'pattern_type': pattern_type,
+            'risk_score': risk_score
         })
+        
+        # Tag accounts with their ring membership (single ring_id per account)
+        for acc in accounts:
+            if acc['account_id'] in cycle:
+                # Assign to highest risk ring if account is in multiple
+                if 'ring_id' not in acc or acc.get('temp_risk', 0) < risk_score:
+                    acc['ring_id'] = ring_id
+                    acc['temp_risk'] = risk_score
     
-    return result
+    # Clean up temporary fields
+    for acc in accounts:
+        if 'temp_risk' in acc:
+            del acc['temp_risk']
+        # Ensure ring_id exists (empty string if not in any ring)
+        if 'ring_id' not in acc:
+            acc['ring_id'] = ''
+    
+    # Sort rings by risk score (highest first)
+    rings.sort(key=lambda r: r['risk_score'], reverse=True)
+    
+    return rings

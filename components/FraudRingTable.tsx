@@ -7,6 +7,15 @@ interface FraudRingTableProps {
 }
 
 export default function FraudRingTable({ rings }: FraudRingTableProps) {
+  const getPatternBadge = (pattern: string) => {
+    const colors = {
+      cycle: "bg-red-100 text-red-800",
+      smurfing: "bg-yellow-100 text-yellow-800",
+      shell: "bg-purple-100 text-purple-800"
+    };
+    return colors[pattern as keyof typeof colors] || "bg-gray-100 text-gray-800";
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold mb-4">Detected Fraud Rings</h2>
@@ -15,20 +24,24 @@ export default function FraudRingTable({ rings }: FraudRingTableProps) {
           <thead>
             <tr className="border-b">
               <th className="text-left p-3">Ring ID</th>
-              <th className="text-left p-3">Pattern</th>
+              <th className="text-left p-3">Pattern Type</th>
               <th className="text-left p-3">Members</th>
-              <th className="text-left p-3">Avg Score</th>
+              <th className="text-left p-3">Risk Score</th>
             </tr>
           </thead>
           <tbody>
             {rings.map((ring) => (
               <tr key={ring.ring_id} className="border-b hover:bg-gray-50">
                 <td className="p-3 font-mono">{ring.ring_id}</td>
-                <td className="p-3">{ring.pattern}</td>
-                <td className="p-3">{ring.members.join(", ")}</td>
                 <td className="p-3">
-                  <span className={`font-semibold ${ring.avg_score > 70 ? "text-red-600" : "text-yellow-600"}`}>
-                    {ring.avg_score.toFixed(1)}
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${getPatternBadge(ring.pattern_type)}`}>
+                    {ring.pattern_type}
+                  </span>
+                </td>
+                <td className="p-3 text-sm">{ring.member_accounts.join(", ")}</td>
+                <td className="p-3">
+                  <span className={`font-semibold ${ring.risk_score > 70 ? "text-red-600" : "text-yellow-600"}`}>
+                    {ring.risk_score.toFixed(1)}
                   </span>
                 </td>
               </tr>

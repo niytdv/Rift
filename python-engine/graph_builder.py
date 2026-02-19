@@ -1,27 +1,51 @@
 import pandas as pd
 import networkx as nx
+from datetime import datetime
 
 def build_graph(csv_path):
+    """Build directed transaction graph from CSV.
+    
+    Expected CSV columns: from_account, to_account, amount, timestamp
+    Returns: (NetworkX DiGraph, DataFrame)
+    """
     df = pd.read_csv(csv_path)
+    
+    # Validate required columns
+    required_cols = ['from_account', 'to_account', 'amount', 'timestamp']
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    
+    # Parse timestamps
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    
+    # Build directed graph
     G = nx.DiGraph()
     
     for _, row in df.iterrows():
-        account_id = row['account_id']
-        G.add_node(account_id, type='account')
+        from_acc = row['from_account']
+        to_acc = row['to_account']
+        amount = float(row['amount'])
+        timestamp = row['timestamp']
         
-        if pd.notna(row.get('ip_address')):
-            ip_node = f"ip_{row['ip_address']}"
-            G.add_node(ip_node, type='ip')
-            G.add_edge(account_id, ip_node, type='uses_ip')
+        # Add nodes if they don't exist
+        if not G.has_node(from_acc):
+            G.add_node(from_acc)
+        if not G.has_node(to_acc):
+            G.add_node(to_acc)
         
-        if pd.notna(row.get('device_id')):
-            device_node = f"device_{row['device_id']}"
-            G.add_node(device_node, type='device')
-            G.add_edge(account_id, device_node, type='uses_device')
-        
-        if pd.notna(row.get('bank_account')):
-            bank_node = f"bank_{row['bank_account']}"
-            G.add_node(bank_node, type='bank')
-            G.add_edge(account_id, bank_node, type='uses_bank')
+        # Add edge with transaction data
+        # Support multiple transactions between same accounts
+        if G.has_edge(from_acc, to_acc):
+            # Append to existing transactions
+            G[from_acc][to_acc]['transactions'].append({
+                'amount': amount,
+                'timestamp': timestamp
+            })
+            G[from_acc][to_acc]['total_amount'] += amount
+        else:
+            G.add_edge(from_acc, to_acc, 
+                      transactions=[{'amount': amount, 'timestamp': timestamp}],
+                      total_amount=amount)
     
     return G, df
