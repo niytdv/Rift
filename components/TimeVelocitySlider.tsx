@@ -12,7 +12,7 @@ export default function TimeVelocitySlider({
   onChange,
 }: TimeVelocitySliderProps) {
   return (
-    <div className="bg-slate-900/80 backdrop-blur-sm rounded-lg border border-cyan-500/20 p-4">
+    <div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Clock className="text-cyan-400" size={16} />
@@ -33,16 +33,16 @@ export default function TimeVelocitySlider({
           step="1"
           value={value}
           onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-thumb"
+          className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer slider-thumb"
           style={{
             background: `linear-gradient(to right, #06B6D4 0%, #06B6D4 ${
               (value / 72) * 100
-            }%, #334155 ${(value / 72) * 100}%, #334155 100%)`,
+            }%, rgba(255,255,255,0.1) ${(value / 72) * 100}%, rgba(255,255,255,0.1) 100%)`,
           }}
         />
         
         {/* Time markers */}
-        <div className="flex justify-between mt-2 text-xs text-slate-500 font-mono">
+        <div className="flex justify-between mt-2 text-xs text-white/40 font-mono">
           <span>00:00</span>
           <span>08:00</span>
           <span>16:00</span>
@@ -55,7 +55,7 @@ export default function TimeVelocitySlider({
         </div>
       </div>
 
-      <p className="text-slate-400 text-xs mt-3">
+      <p className="text-white/60 text-xs mt-3">
         Filter transactions by time window (0-72 hours)
       </p>
 

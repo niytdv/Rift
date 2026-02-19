@@ -154,13 +154,6 @@ export default function Graph3D({
       });
 
     setGraphData({ nodes, links });
-
-    // Auto-zoom to fit all nodes after data loads
-    if (fgRef.current && nodes.length > 0) {
-      setTimeout(() => {
-        fgRef.current?.zoomToFit(400, 50);
-      }, 100);
-    }
   }, [
     accounts,
     edges,
@@ -170,6 +163,28 @@ export default function Graph3D({
     hideWhitelisted,
     timeVelocityFilter,
   ]);
+
+  // Camera centering and force simulation setup
+  useEffect(() => {
+    if (fgRef.current && graphData.nodes.length > 0) {
+      // Access the d3-force-3d instance and set center force
+      const centerForce = fgRef.current.d3Force('center');
+      if (centerForce) {
+        centerForce.x(0).y(0).z(0);
+      }
+      
+      // Position camera to look at center
+      fgRef.current.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 1000);
+      
+      // Reheat simulation to apply centering
+      fgRef.current.d3ReheatSimulation();
+      
+      // Auto-zoom to fit all nodes after centering
+      setTimeout(() => {
+        fgRef.current?.zoomToFit(400, 50);
+      }, 100);
+    }
+  }, [graphData]);
 
   const handleNodeClick = useCallback(
     (node: any) => {
@@ -216,13 +231,14 @@ export default function Graph3D({
   }, []);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex justify-center items-center">
       <ForceGraph3D
         ref={fgRef}
         graphData={graphData}
         nodeLabel="name"
         nodeThreeObject={nodeThreeObject}
         nodeColor={(node: any) => node.color}
+        nodeRelSize={6}
         linkColor={(link: any) => link.color}
         linkOpacity={(link: any) => link.opacity || 0.8}
         linkWidth={(link: any) => link.width || 1}
@@ -231,10 +247,11 @@ export default function Graph3D({
         linkDirectionalParticleWidth={3}
         linkDirectionalParticleColor={(link: any) => link.color}
         onNodeClick={handleNodeClick}
-        backgroundColor="#020617"
+        backgroundColor="rgba(0,0,0,0)"
         showNavInfo={false}
         enableNodeDrag={true}
         enableNavigationControls={true}
+        controlType="trackball"
         // Enable force physics
         d3Force="charge"
         d3VelocityDecay={0.3}

@@ -9,8 +9,41 @@ export interface GraphEdge {
 }
 
 /**
- * Generate graph edges from analysis result
- * This is a helper function since the contract doesn't include graph data
+ * Parse CSV file and extract transaction edges
+ * This reads the actual transaction data from the CSV
+ */
+export async function loadTransactionEdges(csvPath: string): Promise<GraphEdge[]> {
+  try {
+    const response = await fetch(csvPath);
+    const csvText = await response.text();
+    
+    const lines = csvText.trim().split('\n');
+    const edges: GraphEdge[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      
+      if (values.length >= 4) {
+        edges.push({
+          source: values[0].trim(),
+          target: values[1].trim(),
+          total_amount: parseFloat(values[2]) || 0,
+          earliest_timestamp: values[3].trim(),
+          latest_timestamp: values[3].trim(),
+        });
+      }
+    }
+    
+    return edges;
+  } catch (error) {
+    console.error('Failed to load transaction edges:', error);
+    return [];
+  }
+}
+
+/**
+ * Generate graph edges from analysis result (fallback method)
+ * This is a helper function for when CSV is not available
  */
 export function generateGraphEdges(data: AnalysisResult): GraphEdge[] {
   const edges: GraphEdge[] = [];
