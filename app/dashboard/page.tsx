@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Dashboard3D from "@/components/Dashboard3D";
+import IntroVideo from "@/components/IntroVideo";
 import { AnalysisResult } from "@/lib/types";
 import { loadTransactionEdges, GraphEdge } from "@/lib/graphUtils";
 
@@ -9,9 +10,11 @@ export default function DashboardPage() {
   const [data, setData] = useState<AnalysisResult | null>(null);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showIntro, setShowIntro] = useState(true);
+  const [introComplete, setIntroComplete] = useState(false);
 
   useEffect(() => {
-    // Load analysis data and transaction edges
+    // Start loading data immediately (parallel with intro video)
     Promise.all([
       fetch("/api/sample").then((res) => res.json()),
       loadTransactionEdges("/test_data.csv"),
@@ -27,7 +30,19 @@ export default function DashboardPage() {
       });
   }, []);
 
-  if (loading) {
+  // Handle intro video completion
+  const handleIntroComplete = () => {
+    setShowIntro(false);
+    setIntroComplete(true);
+  };
+
+  // Show intro video first
+  if (showIntro) {
+    return <IntroVideo onComplete={handleIntroComplete} />;
+  }
+
+  // After intro, show loading if data isn't ready
+  if (loading && introComplete) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center relative overflow-hidden">
         {/* Blurred Background Image */}

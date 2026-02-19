@@ -5,15 +5,34 @@ from graph_builder import build_graph, prune_isolated_nodes
 from detectors import detect_all_patterns
 from ring_grouper import group_rings_by_pattern
 
-def calculate_suspicion_score(patterns):
-    """Calculate weighted suspicion score based on detected patterns."""
+def calculate_suspicion_score(patterns, aggressive_mode=False):
+    """Calculate weighted suspicion score based on detected patterns.
+    
+    Args:
+        patterns: List of detected pattern strings
+        aggressive_mode: If True, use higher weights for single-pattern detection
+    
+    Returns:
+        Suspicion score (0-100)
+    """
     score = 0
-    pattern_weights = {
-        'cycle': 40,
-        'smurfing': 40,  # Base boost of +40 for smurfing
-        'shell': 30,
-        'velocity': 30
-    }
+    
+    if aggressive_mode:
+        # Aggressive weights - single pattern can flag account
+        pattern_weights = {
+            'cycle': 60,      # High risk - circular routing
+            'smurfing': 55,   # High risk - structuring
+            'shell': 50,      # Medium-high risk - layering
+            'velocity': 45    # Medium risk - pass-through
+        }
+    else:
+        # Conservative weights - need multiple patterns
+        pattern_weights = {
+            'cycle': 40,
+            'smurfing': 40,
+            'shell': 30,
+            'velocity': 30
+        }
     
     for pattern in patterns:
         pattern_lower = pattern.lower()
@@ -35,12 +54,16 @@ def main():
     - Circular Fund Routing (Cycles)
     - Smurfing Patterns (Fan-in / Fan-out)
     - Layered Shell Networks
+    
+    Usage:
+        python main.py <csv_path> [--aggressive]
     """
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: python main.py <csv_path>"}), file=sys.stderr)
+        print(json.dumps({"error": "Usage: python main.py <csv_path> [--aggressive]"}), file=sys.stderr)
         sys.exit(1)
 
     csv_path = sys.argv[1]
+    aggressive_mode = '--aggressive' in sys.argv
     start_time = time.time()
     
     # Build graph
@@ -85,7 +108,7 @@ def main():
             pattern_name = results['velocity_metadata'].get(account_id, 'high_velocity')
             detected_patterns.append(pattern_name)
         
-        suspicion_score = calculate_suspicion_score(detected_patterns)
+        suspicion_score = calculate_suspicion_score(detected_patterns, aggressive_mode)
         
         # Only include accounts with score > 50
         if suspicion_score > 50:
