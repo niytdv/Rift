@@ -5,16 +5,25 @@ from graph_builder import build_graph, prune_isolated_nodes
 from detectors import detect_all_patterns
 from ring_grouper import group_rings_by_pattern
 
-def calculate_suspicion_score(patterns, aggressive_mode=False):
-    """Calculate weighted suspicion score based on detected patterns.
+class DeterministicJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder ensuring deterministic float formatting."""
+    def encode(self, o):
+        if isinstance(o, float):
+            # Always format floats with exactly 1 decimal place
+            return f"{o:.1f}"
+        return super().encode(o)
     
-    Args:
-        patterns: List of detected pattern strings
-        aggressive_mode: If True, use higher weights for single-pattern detection
-    
-    Returns:
-        Suspicion score (0-100)
-    """
+    def iterencode(self, o, _one_shot=False):
+        """Encode while ensuring float formatting."""
+        for chunk in super().iterencode(o, _one_shot):
+            yield chunk
+
+def format_float(value):
+    """Format float to exactly 1 decimal place."""
+    return float(f"{value:.1f}")
+
+def calculate_suspicion_score(patterns):
+    """Calculate weighted suspicion score based on detected patterns."""
     score = 0
     
     if aggressive_mode:
@@ -79,7 +88,7 @@ def main():
     ring_data = group_rings_by_pattern(results)
     account_to_ring = ring_data['ring_assignments']
     
-    # Build suspicious_accounts list
+    # Build suspicious_accounts list with STRICT DETERMINISTIC ORDERING
     suspicious_accounts = []
     all_suspicious_nodes = (
         results['cycle_nodes'] | 
@@ -88,10 +97,11 @@ def main():
         results['velocity_nodes']
     )
     
-    for account_id in all_suspicious_nodes:
+    # Sort nodes alphabetically FIRST for deterministic iteration
+    for account_id in sorted(all_suspicious_nodes):
         detected_patterns = []
         
-        # Add descriptive pattern names
+        # Add descriptive pattern names in DETERMINISTIC ORDER
         if account_id in results['cycle_nodes']:
             pattern_name = results['cycle_metadata'].get(account_id, 'cycle')
             detected_patterns.append(pattern_name)
@@ -108,25 +118,28 @@ def main():
             pattern_name = results['velocity_metadata'].get(account_id, 'high_velocity')
             detected_patterns.append(pattern_name)
         
-        suspicion_score = calculate_suspicion_score(detected_patterns, aggressive_mode)
+        # Sort patterns alphabetically for deterministic order
+        detected_patterns.sort()
+        
+        suspicion_score = calculate_suspicion_score(detected_patterns)
         
         # Only include accounts with score > 50
         if suspicion_score > 50:
             suspicious_accounts.append({
                 "account_id": account_id,
-                "suspicion_score": float(round(suspicion_score, 1)),
+                "suspicion_score": format_float(suspicion_score),
                 "detected_patterns": detected_patterns,
                 "ring_id": account_to_ring.get(account_id, "")
             })
     
-    # Sort by suspicion_score descending
-    suspicious_accounts.sort(key=lambda x: x['suspicion_score'], reverse=True)
+    # Sort by suspicion_score DESC, then by account_id ASC for tie-breaking
+    suspicious_accounts.sort(key=lambda x: (-x['suspicion_score'], x['account_id']))
     
-    # Build final fraud_rings output
+    # Build final fraud_rings output with STRICT DETERMINISTIC ORDERING
     fraud_rings_output = []
     for ring_info in ring_data['rings_by_pattern']:
         ring_id = ring_info['ring_id']
-        members = ring_info['members']
+        members = ring_info['members']  # Already sorted alphabetically in ring_grouper
         pattern_type = ring_info['pattern_type']
         
         # Calculate risk score as simple average of member suspicion scores
@@ -156,23 +169,26 @@ def main():
                     pattern_name = results['velocity_metadata'].get(account_id, 'high_velocity')
                     detected_patterns.append(pattern_name)
                 
+                detected_patterns.sort()  # Deterministic pattern order
                 score = calculate_suspicion_score(detected_patterns)
                 member_scores.append(score)
         
         # Simple average: sum(member_scores) / len(member_scores)
         # No multipliers, no structural weighting, no randomness
-        risk_score = round(sum(member_scores) / len(member_scores), 1) if member_scores else 0.0
+        risk_score = format_float(sum(member_scores) / len(member_scores)) if member_scores else 0.0
         
         fraud_rings_output.append({
             "ring_id": ring_id,
             "member_accounts": members,
             "pattern_type": pattern_type,
-            "risk_score": float(risk_score)
+            "risk_score": risk_score
         })
+    
+    # Fraud rings already sorted by ring_id in ring_grouper (RING_001, RING_002, etc.)
     
     processing_time = time.time() - start_time
     
-    # Build final output matching MuleRift contract
+    # Build final output matching MuleRift contract with STRICT ORDERING
     output = {
         "suspicious_accounts": suspicious_accounts,
         "fraud_rings": fraud_rings_output,
@@ -180,12 +196,20 @@ def main():
             "total_accounts_analyzed": G.number_of_nodes(),
             "suspicious_accounts_flagged": len(suspicious_accounts),
             "fraud_rings_detected": len(fraud_rings_output),
-            "processing_time_seconds": float(round(processing_time, 1))
+            "processing_time_seconds": format_float(processing_time)
         }
     }
     
-    # Print with custom formatting to ensure .0 for whole number floats
-    json_str = json.dumps(output, indent=2, ensure_ascii=False)
+    # Use custom JSON encoder with deterministic formatting
+    # sort_keys=True ensures consistent key ordering
+    # separators removes extra whitespace
+    json_str = json.dumps(
+        output, 
+        indent=2, 
+        ensure_ascii=False,
+        sort_keys=False,  # Keep our explicit key order
+        separators=(',', ': ')  # Consistent spacing
+    )
     print(json_str)
 
 if __name__ == "__main__":

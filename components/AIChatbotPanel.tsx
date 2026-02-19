@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
+import { AnalysisResult } from "@/lib/types";
 
 interface Message {
   id: string;
@@ -10,7 +11,11 @@ interface Message {
   timestamp: Date;
 }
 
-export default function AIChatbotPanel() {
+interface AIChatbotPanelProps {
+  analysisContext?: AnalysisResult;
+}
+
+export default function AIChatbotPanel({ analysisContext }: AIChatbotPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -22,14 +27,24 @@ export default function AIChatbotPanel() {
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Also scroll after loading state changes
+  useEffect(() => {
+    if (!isLoading) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [isLoading]);
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -75,7 +90,7 @@ export default function AIChatbotPanel() {
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "ai",
-        content: data.response,
+        content: data.message,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMessage]);
@@ -86,7 +101,7 @@ export default function AIChatbotPanel() {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "ai",
-        content: "I apologize, but I'm having trouble connecting to the AI service. Please make sure the XAI_API_KEY is configured in your environment variables.",
+        content: "I apologize, but I'm having trouble connecting to the AI service. Please make sure the GROQ_API_KEY is configured in your .env.local file.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -118,7 +133,7 @@ export default function AIChatbotPanel() {
       </div>
 
       {/* Message Display Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
         {messages.map((message) => (
           <div
             key={message.id}

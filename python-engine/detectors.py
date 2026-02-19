@@ -6,6 +6,7 @@ import pandas as pd
 def detect_cycles(G, max_length=5, time_window_hours=72):
     """
     Detect cycles where all transactions occur within 72 hours.
+    Optimized with depth-limited DFS to avoid exponential complexity.
     
     Returns:
         cycle_nodes: set of nodes involved in cycles
@@ -15,40 +16,51 @@ def detect_cycles(G, max_length=5, time_window_hours=72):
     cycle_nodes = set()
     cycle_groups = []
     cycle_metadata = {}
+    seen_cycles = set()  # Deduplicate cycles
     
-    try:
-        cycles = list(nx.simple_cycles(G))
-    except:
-        return cycle_nodes, cycle_groups, cycle_metadata
+    def dfs_cycles(node, path, depth):
+        """DFS with depth limit to find cycles."""
+        if depth > max_length:
+            return
+        
+        for neighbor in G.successors(node):
+            if neighbor in path:
+                # Found a cycle
+                cycle_start_idx = path.index(neighbor)
+                cycle = path[cycle_start_idx:]
+                
+                if len(cycle) >= 3 and len(cycle) <= max_length:
+                    # Normalize cycle for deduplication (smallest node first)
+                    normalized = tuple(sorted(cycle))
+                    if normalized not in seen_cycles:
+                        # Check temporal constraint
+                        timestamps = []
+                        valid = True
+                        for i in range(len(cycle)):
+                            src = cycle[i]
+                            dst = cycle[(i + 1) % len(cycle)]
+                            if G.has_edge(src, dst):
+                                timestamps.append(G[src][dst]['timestamp'])
+                            else:
+                                valid = False
+                                break
+                        
+                        if valid and timestamps:
+                            time_span = max(timestamps) - min(timestamps)
+                            if time_span <= timedelta(hours=time_window_hours):
+                                seen_cycles.add(normalized)
+                                cycle_nodes.update(cycle)
+                                cycle_groups.append(list(cycle))
+                                for n in cycle:
+                                    cycle_metadata[n] = f"cycle_length_{len(cycle)}"
+            elif neighbor not in path:
+                dfs_cycles(neighbor, path + [neighbor], depth + 1)
     
-    for cycle in cycles:
-        if len(cycle) > max_length:
-            continue
-        
-        # Get all edges in the cycle
-        edges = []
-        for i in range(len(cycle)):
-            src = cycle[i]
-            dst = cycle[(i + 1) % len(cycle)]
-            
-            if G.has_edge(src, dst):
-                edge_data = G[src][dst]
-                edges.append(edge_data)
-        
-        if not edges:
-            continue
-        
-        # Check temporal constraint
-        timestamps = [edge['timestamp'] for edge in edges]
-        time_span = max(timestamps) - min(timestamps)
-        
-        if time_span <= timedelta(hours=time_window_hours):
-            cycle_nodes.update(cycle)
-            cycle_groups.append(list(cycle))
-            
-            # Add metadata
-            for node in cycle:
-                cycle_metadata[node] = f"cycle_length_{len(cycle)}"
+    # Run DFS from each node (limit to avoid timeout)
+    # Sort nodes for deterministic iteration
+    sorted_nodes = sorted(G.nodes())
+    for node in sorted_nodes[:min(len(sorted_nodes), 1000)]:
+        dfs_cycles(node, [node], 1)
     
     return cycle_nodes, cycle_groups, cycle_metadata
 
@@ -85,6 +97,7 @@ def is_merchant(G, node, df, long_term_days=30):
 def detect_smurfing_fan_in(G, df, min_senders=10, burst_window_hours=72, velocity_ratio=0.7):
     """
     Detect Fan-In (Aggregation) smurfing patterns.
+    Optimized with sorted transaction processing.
     
     Criteria:
     - unique_senders >= 10 within burst_window <= 72h
@@ -100,7 +113,8 @@ def detect_smurfing_fan_in(G, df, min_senders=10, burst_window_hours=72, velocit
     smurfing_groups = []
     smurfing_metadata = {}
     
-    for node in G.nodes():
+    # Sort nodes for deterministic iteration
+    for node in sorted(G.nodes()):
         # Skip if merchant
         if is_merchant(G, node, df):
             continue
@@ -111,7 +125,7 @@ def detect_smurfing_fan_in(G, df, min_senders=10, burst_window_hours=72, velocit
         if len(predecessors) < min_senders:
             continue
         
-        # Check burst window
+        # Collect and sort incoming transactions
         incoming_txns = []
         for pred in predecessors:
             if G.has_edge(pred, node):
@@ -125,26 +139,22 @@ def detect_smurfing_fan_in(G, df, min_senders=10, burst_window_hours=72, velocit
         # Sort by timestamp
         incoming_txns.sort(key=lambda x: x['timestamp'])
         
-        # Check for burst window
+        # Use sliding window to check burst
+        found_burst = False
         for i in range(len(incoming_txns) - min_senders + 1):
-            window_txns = incoming_txns[i:i + min_senders]
-            time_span = window_txns[-1]['timestamp'] - window_txns[0]['timestamp']
+            window_end = i + min_senders - 1
+            time_span = incoming_txns[window_end]['timestamp'] - incoming_txns[i]['timestamp']
             
             if time_span <= timedelta(hours=burst_window_hours):
-                # Calculate velocity ratio
+                # Calculate velocity ratio once
                 total_in = sum(G[pred][node]['amount'] for pred in predecessors)
                 total_out = sum(G[node][succ]['amount'] for succ in G.successors(node))
                 
-                if total_in == 0:
-                    continue
-                
-                velocity = total_out / total_in
-                
-                if velocity >= velocity_ratio:
+                if total_in > 0 and (total_out / total_in) >= velocity_ratio:
                     smurfing_nodes.add(node)
                     
-                    # Create ring: collector + all senders in burst
-                    burst_senders = [txn['sender'] for txn in window_txns]
+                    # Create ring: collector + senders in burst window
+                    burst_senders = [incoming_txns[j]['sender'] for j in range(i, window_end + 1)]
                     ring_members = [node] + burst_senders
                     smurfing_groups.append(ring_members)
                     
@@ -153,13 +163,18 @@ def detect_smurfing_fan_in(G, df, min_senders=10, burst_window_hours=72, velocit
                     for sender in burst_senders:
                         smurfing_metadata[sender] = "fan_in_participant"
                     
+                    found_burst = True
                     break
+        
+        if found_burst:
+            continue
     
     return smurfing_nodes, smurfing_groups, smurfing_metadata
 
 def detect_smurfing_fan_out(G, df, min_receivers=10, burst_window_hours=72, velocity_ratio=0.7):
     """
     Detect Fan-Out (Dispersion) smurfing patterns.
+    Optimized with sorted transaction processing.
     
     Criteria:
     - unique_receivers >= 10 within burst_window <= 72h
@@ -174,14 +189,15 @@ def detect_smurfing_fan_out(G, df, min_receivers=10, burst_window_hours=72, velo
     smurfing_groups = []
     smurfing_metadata = {}
     
-    for node in G.nodes():
+    # Sort nodes for deterministic iteration
+    for node in sorted(G.nodes()):
         # Get all outgoing transactions
         successors = list(G.successors(node))
         
         if len(successors) < min_receivers:
             continue
         
-        # Check burst window
+        # Collect and sort outgoing transactions
         outgoing_txns = []
         for succ in successors:
             if G.has_edge(node, succ):
@@ -195,26 +211,22 @@ def detect_smurfing_fan_out(G, df, min_receivers=10, burst_window_hours=72, velo
         # Sort by timestamp
         outgoing_txns.sort(key=lambda x: x['timestamp'])
         
-        # Check for burst window
+        # Use sliding window to check burst
+        found_burst = False
         for i in range(len(outgoing_txns) - min_receivers + 1):
-            window_txns = outgoing_txns[i:i + min_receivers]
-            time_span = window_txns[-1]['timestamp'] - window_txns[0]['timestamp']
+            window_end = i + min_receivers - 1
+            time_span = outgoing_txns[window_end]['timestamp'] - outgoing_txns[i]['timestamp']
             
             if time_span <= timedelta(hours=burst_window_hours):
-                # Calculate velocity ratio
+                # Calculate velocity ratio once
                 total_in = sum(G[pred][node]['amount'] for pred in G.predecessors(node))
                 total_out = sum(G[node][succ]['amount'] for succ in successors)
                 
-                if total_in == 0:
-                    continue
-                
-                velocity = total_out / total_in
-                
-                if velocity >= velocity_ratio:
+                if total_in > 0 and (total_out / total_in) >= velocity_ratio:
                     smurfing_nodes.add(node)
                     
-                    # Create ring: disperser + all receivers in burst
-                    burst_receivers = [txn['receiver'] for txn in window_txns]
+                    # Create ring: disperser + receivers in burst window
+                    burst_receivers = [outgoing_txns[j]['receiver'] for j in range(i, window_end + 1)]
                     ring_members = [node] + burst_receivers
                     smurfing_groups.append(ring_members)
                     
@@ -223,7 +235,11 @@ def detect_smurfing_fan_out(G, df, min_receivers=10, burst_window_hours=72, velo
                     for receiver in burst_receivers:
                         smurfing_metadata[receiver] = "fan_out_participant"
                     
+                    found_burst = True
                     break
+        
+        if found_burst:
+            continue
     
     return smurfing_nodes, smurfing_groups, smurfing_metadata
 
@@ -242,7 +258,8 @@ def detect_velocity(G, pass_through_threshold=0.85, avg_time_hours=24):
     velocity_nodes = set()
     velocity_metadata = {}
     
-    for node in G.nodes():
+    # Sort nodes for deterministic iteration
+    for node in sorted(G.nodes()):
         # Calculate total in and out
         total_in = sum(G[pred][node]['amount'] for pred in G.predecessors(node))
         total_out = sum(G[node][succ]['amount'] for succ in G.successors(node))
@@ -324,6 +341,7 @@ def calculate_intermediate_velocity(G, node):
 def detect_peel_chains(G, df, min_length=3, time_window_hours=72, max_velocity_hours=24):
     """
     Detect shell/layering chains with strict temporal and behavioral criteria.
+    Optimized with degree-based filtering and limited path search.
     
     Refined Criteria:
     1. Temporal Chain: max_timestamp - min_timestamp <= 72h
@@ -340,91 +358,77 @@ def detect_peel_chains(G, df, min_length=3, time_window_hours=72, max_velocity_h
     peel_groups = []
     peel_metadata = {}
     
-    # Find all simple paths up to reasonable length
-    for source in G.nodes():
-        for target in G.nodes():
-            if source == target:
-                continue
-            
-            try:
-                paths = list(nx.all_simple_paths(G, source, target, cutoff=10))
-            except:
-                continue
-            
-            for path in paths:
-                if len(path) < min_length:
-                    continue
-                
-                # 1. Check temporal chain constraint (72 hours)
-                timestamps = []
-                for i in range(len(path) - 1):
-                    src = path[i]
-                    dst = path[i + 1]
-                    edge_data = G[src][dst]
-                    timestamps.append(edge_data['timestamp'])
-                
-                if not timestamps:
-                    continue
-                
-                time_span = max(timestamps) - min(timestamps)
-                if time_span > timedelta(hours=time_window_hours):
-                    # Chain spans more than 72h - considered 'Normal Business'
-                    continue
-                
-                # 2. Check intermediate node velocity
-                valid_chain = True
-                prev_amount = None
-                prev_time = None
-                
-                for i in range(len(path) - 1):
-                    src = path[i]
-                    dst = path[i + 1]
-                    
-                    edge_data = G[src][dst]
-                    amount = edge_data['amount']
-                    timestamp = edge_data['timestamp']
-                    
-                    # Check strict amount decay
-                    if prev_amount is not None and amount >= prev_amount:
-                        valid_chain = False
-                        break
-                    
-                    # Check intermediate node velocity (for nodes in the middle)
-                    if i > 0 and i < len(path) - 2:  # Intermediate nodes only
-                        node = path[i]
-                        velocity = calculate_intermediate_velocity(G, node)
-                        
-                        if velocity is not None and velocity > max_velocity_hours:
-                            # Node 'parks' money for too long - less suspicious
-                            valid_chain = False
-                            break
-                    
-                    prev_amount = amount
-                    prev_time = timestamp
-                
-                if not valid_chain:
-                    continue
-                
-                # 3. Ghost Account Activity Filter
-                # Check if intermediate nodes are ghost accounts
-                ghost_chain = True
-                for i in range(1, len(path) - 1):  # Check intermediate nodes only
-                    node = path[i]
-                    if not is_ghost_account(G, node, df):
-                        # Account has outside life - not a shell
-                        ghost_chain = False
+    # Precompute ghost accounts (low degree nodes)
+    ghost_accounts = set()
+    for node in G.nodes():
+        if is_ghost_account(G, node, df):
+            ghost_accounts.add(node)
+    
+    # Only search from nodes with potential shell patterns
+    # (nodes with low-medium degree that could be part of chains)
+    candidate_sources = sorted([n for n in G.nodes() if G.out_degree(n) > 0 and G.out_degree(n) <= 5])
+    
+    # Limit search to avoid timeout
+    max_sources = min(len(candidate_sources), 500)
+    
+    def dfs_shell_chain(node, path, amounts, timestamps, depth):
+        """DFS to find shell chains with depth limit."""
+        if depth > 6:  # Limit depth
+            return
+        
+        if len(path) >= min_length:
+            # Check if this is a valid shell chain
+            time_span = max(timestamps) - min(timestamps)
+            if time_span <= timedelta(hours=time_window_hours):
+                # Check intermediate nodes are ghosts
+                valid = True
+                for i in range(1, len(path) - 1):
+                    if path[i] not in ghost_accounts:
+                        valid = False
                         break
                 
-                if not ghost_chain:
+                if valid:
+                    peel_nodes.update(path)
+                    peel_groups.append(list(path))
+                    for n in path:
+                        peel_metadata[n] = f"shell_hop_{len(path)}"
+        
+        # Continue DFS
+        for neighbor in G.successors(node):
+            if neighbor not in path:
+                edge_data = G[node][neighbor]
+                amount = edge_data['amount']
+                timestamp = edge_data['timestamp']
+                
+                # Check amount decay
+                if amounts and amount >= amounts[-1]:
                     continue
                 
-                # Valid shell chain found
-                peel_nodes.update(path)
-                peel_groups.append(path)
+                # Check velocity for intermediate nodes
+                if len(path) > 1:
+                    velocity = calculate_intermediate_velocity(G, node)
+                    if velocity is not None and velocity > max_velocity_hours:
+                        continue
                 
-                # Add metadata
-                for node in path:
-                    peel_metadata[node] = f"shell_hop_{len(path)}"
+                dfs_shell_chain(
+                    neighbor,
+                    path + [neighbor],
+                    amounts + [amount],
+                    timestamps + [timestamp],
+                    depth + 1
+                )
+    
+    # Run limited DFS from candidate sources
+    for source in candidate_sources[:max_sources]:
+        for neighbor in G.successors(source):
+            edge_data = G[source][neighbor]
+            dfs_shell_chain(
+                neighbor,
+                [source, neighbor],
+                [edge_data['amount']],
+                [edge_data['timestamp']],
+                2
+            )
     
     return peel_nodes, peel_groups, peel_metadata
 

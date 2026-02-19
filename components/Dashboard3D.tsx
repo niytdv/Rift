@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { Search, Download, Upload } from "lucide-react";
-import { gsap } from "gsap";
 import { AnalysisResult, SuspiciousAccount } from "@/lib/types";
 import GraphDisplayCard from "./GraphDisplayCard";
 import ExplainableRiskPanel from "./ExplainableRiskPanel";
@@ -29,85 +28,6 @@ export default function Dashboard3D({ data, edges }: Dashboard3DProps) {
   const [timeVelocityFilter, setTimeVelocityFilter] = useState(72);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Refs for GSAP animations
-  const headerRef = useRef<HTMLElement>(null);
-  const controlsRef = useRef<HTMLDivElement>(null);
-  const graphRef = useRef<HTMLDivElement>(null);
-  const sliderRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const bgRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Create master timeline
-    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-
-    // Animate background with zoom effect
-    tl.fromTo(
-      bgRef.current,
-      { scale: 1.2, opacity: 0 },
-      { scale: 1.05, opacity: 1, duration: 1.5, ease: "power2.out" }
-    );
-
-    // Animate header sliding down
-    tl.fromTo(
-      headerRef.current,
-      { y: -100, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.8, ease: "back.out(1.2)" },
-      "-=1.2"
-    );
-
-    // Animate controls sliding in from left
-    tl.fromTo(
-      controlsRef.current,
-      { x: -100, opacity: 0 },
-      { x: 0, opacity: 1, duration: 0.6 },
-      "-=0.4"
-    );
-
-    // Animate graph with scale and fade
-    tl.fromTo(
-      graphRef.current,
-      { scale: 0.9, opacity: 0, y: 30 },
-      { scale: 1, opacity: 1, y: 0, duration: 1, ease: "back.out(1.1)" },
-      "-=0.3"
-    );
-
-    // Animate slider
-    tl.fromTo(
-      sliderRef.current,
-      { x: -50, opacity: 0 },
-      { x: 0, opacity: 1, duration: 0.5 },
-      "-=0.5"
-    );
-
-    // Animate table
-    tl.fromTo(
-      tableRef.current,
-      { y: 50, opacity: 0 },
-      { y: 0, opacity: 1, duration: 0.6 },
-      "-=0.3"
-    );
-
-    // Animate sidebar sliding in from right
-    tl.fromTo(
-      sidebarRef.current,
-      { x: 100, opacity: 0 },
-      { x: 0, opacity: 1, duration: 0.8, ease: "power2.out" },
-      "-=0.8"
-    );
-
-    // Add subtle floating animation to graph after entrance
-    gsap.to(graphRef.current, {
-      y: -5,
-      duration: 2,
-      repeat: -1,
-      yoyo: true,
-      ease: "sine.inOut",
-      delay: 2
-    });
-  }, []);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -282,7 +202,9 @@ export default function Dashboard3D({ data, edges }: Dashboard3DProps) {
         </div>
 
         {/* Right Sidebar (AI Chatbot) */}
-        <AIChatbotPanel />
+        <div className="h-full overflow-hidden">
+          <AIChatbotPanel analysisContext={data} />
+        </div>
       </div>
 
       {/* Explainable Risk Panel */}
