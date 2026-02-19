@@ -3,13 +3,14 @@ import json
 import time
 from graph_builder import build_graph, prune_isolated_nodes
 from detectors import detect_all_patterns
+from ring_grouper import group_rings_by_pattern
 
 def calculate_suspicion_score(patterns):
     """Calculate weighted suspicion score based on detected patterns."""
     score = 0
     pattern_weights = {
         'cycle': 40,
-        'smurfing': 30,
+        'smurfing': 40,  # Base boost of +40 for smurfing
         'shell': 30,
         'velocity': 30
     }
@@ -49,7 +50,11 @@ def main():
     G = prune_isolated_nodes(G)
     
     # Run detection algorithms
-    results = detect_all_patterns(G)
+    results = detect_all_patterns(G, df)
+    
+    # Group rings with merging and deterministic sorting
+    ring_data = group_rings_by_pattern(results)
+    account_to_ring = ring_data['ring_assignments']
     
     # Build suspicious_accounts list
     suspicious_accounts = []
@@ -59,30 +64,6 @@ def main():
         results['shell_nodes'] |
         results['velocity_nodes']
     )
-    
-    # Map accounts to rings
-    account_to_ring = {}
-    ring_counter = 1
-    
-    for cycle in results['cycle_groups']:
-        ring_id = f"RING_{ring_counter:03d}"
-        for account in cycle:
-            account_to_ring[account] = ring_id
-        ring_counter += 1
-    
-    for smurfing_group in results['smurfing_groups']:
-        ring_id = f"RING_{ring_counter:03d}"
-        for account in smurfing_group:
-            if account not in account_to_ring:
-                account_to_ring[account] = ring_id
-        ring_counter += 1
-    
-    for shell_chain in results['shell_groups']:
-        ring_id = f"RING_{ring_counter:03d}"
-        for account in shell_chain:
-            if account not in account_to_ring:
-                account_to_ring[account] = ring_id
-        ring_counter += 1
     
     for account_id in all_suspicious_nodes:
         detected_patterns = []
@@ -110,7 +91,7 @@ def main():
         if suspicion_score > 50:
             suspicious_accounts.append({
                 "account_id": account_id,
-                "suspicion_score": round(suspicion_score, 1),
+                "suspicion_score": float(round(suspicion_score, 1)),
                 "detected_patterns": detected_patterns,
                 "ring_id": account_to_ring.get(account_id, "")
             })
@@ -118,45 +99,16 @@ def main():
     # Sort by suspicion_score descending
     suspicious_accounts.sort(key=lambda x: x['suspicion_score'], reverse=True)
     
-    # Build fraud_rings list
-    fraud_rings = []
-    ring_data = {}
-    
-    # Process cycle groups
-    for cycle in results['cycle_groups']:
-        ring_id = f"RING_{len(fraud_rings) + 1:03d}"
-        ring_data[ring_id] = {
-            'members': sorted(list(set(cycle))),
-            'pattern_type': 'cycle'
-        }
-        fraud_rings.append(ring_id)
-    
-    # Process smurfing groups
-    for smurfing_group in results['smurfing_groups']:
-        ring_id = f"RING_{len(fraud_rings) + 1:03d}"
-        ring_data[ring_id] = {
-            'members': sorted(list(set(smurfing_group))),
-            'pattern_type': 'smurfing'
-        }
-        fraud_rings.append(ring_id)
-    
-    # Process shell groups
-    for shell_chain in results['shell_groups']:
-        ring_id = f"RING_{len(fraud_rings) + 1:03d}"
-        ring_data[ring_id] = {
-            'members': sorted(list(set(shell_chain))),
-            'pattern_type': 'shell'
-        }
-        fraud_rings.append(ring_id)
-    
     # Build final fraud_rings output
     fraud_rings_output = []
-    for ring_id in fraud_rings:
-        data = ring_data[ring_id]
+    for ring_info in ring_data['rings_by_pattern']:
+        ring_id = ring_info['ring_id']
+        members = ring_info['members']
+        pattern_type = ring_info['pattern_type']
         
-        # Calculate risk score from all members (not just suspicious ones)
+        # Calculate risk score from all members
         member_scores = []
-        for account_id in data['members']:
+        for account_id in members:
             detected_patterns = []
             
             if account_id in results['cycle_nodes']:
@@ -182,13 +134,10 @@ def main():
         
         fraud_rings_output.append({
             "ring_id": ring_id,
-            "member_accounts": data['members'],
-            "pattern_type": data['pattern_type'],
-            "risk_score": round(risk_score, 1)
+            "member_accounts": members,
+            "pattern_type": pattern_type,
+            "risk_score": float(round(risk_score, 1))
         })
-    
-    # Sort by ring_id ascending
-    fraud_rings_output.sort(key=lambda x: x['ring_id'])
     
     processing_time = time.time() - start_time
     
@@ -200,11 +149,13 @@ def main():
             "total_accounts_analyzed": G.number_of_nodes(),
             "suspicious_accounts_flagged": len(suspicious_accounts),
             "fraud_rings_detected": len(fraud_rings_output),
-            "processing_time_seconds": round(processing_time, 1)
+            "processing_time_seconds": float(round(processing_time, 1))
         }
     }
     
-    print(json.dumps(output, indent=2))
+    # Print with custom formatting to ensure .0 for whole number floats
+    json_str = json.dumps(output, indent=2, ensure_ascii=False)
+    print(json_str)
 
 if __name__ == "__main__":
     main()
