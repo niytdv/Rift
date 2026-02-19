@@ -20,7 +20,18 @@ export async function POST(request: NextRequest) {
 
     const result = await analyzeCsv(tmpPath);
 
-    return NextResponse.json(result);
+    // Serialize with custom float formatting
+    let jsonString = JSON.stringify(result);
+    
+    // Replace numeric values with .1 decimal format for specific fields
+    jsonString = jsonString.replace(/"(suspicion_score|risk_score|processing_time_seconds)":(\d+\.?\d*)([,\}])/g, (match, field, value, suffix) => {
+      const num = parseFloat(value);
+      return `"${field}":${num.toFixed(1)}${suffix}`;
+    });
+
+    return new NextResponse(jsonString, {
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error("Analysis error:", error);
     return NextResponse.json(
