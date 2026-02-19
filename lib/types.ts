@@ -28,7 +28,6 @@ export interface AnalysisResult {
 // Graph visualization types
 export interface GraphNode {
   id: string;
-  type: 'account' | 'shared_entity';
   label: string;
   suspicion_score?: number;
   ring_id?: string | null;
@@ -37,5 +36,13 @@ export interface GraphNode {
 export interface GraphEdge {
   source: string;
   target: string;
-  type: string;
+  transaction_count: number;
+  total_amount: number;
+  earliest_timestamp: string;
+  latest_timestamp: string;
+}
+
+export interface Transaction {
+  amount: number;
+  timestamp: string;
 }

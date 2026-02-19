@@ -1,6 +1,7 @@
 import networkx as nx
 from datetime import timedelta
 from collections import defaultdict
+from datetime import timedelta
 
 def detect_cycles(G, max_length=5, time_window_hours=72):
     """

@@ -7,6 +7,15 @@ interface FraudRingTableProps {
 }
 
 export default function FraudRingTable({ rings }: FraudRingTableProps) {
+  const getPatternBadge = (pattern: string) => {
+    const colors = {
+      cycle: "bg-red-100 text-red-800",
+      smurfing: "bg-yellow-100 text-yellow-800",
+      shell: "bg-purple-100 text-purple-800"
+    };
+    return colors[pattern as keyof typeof colors] || "bg-gray-100 text-gray-800";
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       <h2 className="text-2xl font-bold mb-4">Detected Fraud Rings</h2>
@@ -15,7 +24,7 @@ export default function FraudRingTable({ rings }: FraudRingTableProps) {
           <thead>
             <tr className="border-b">
               <th className="text-left p-3">Ring ID</th>
-              <th className="text-left p-3">Pattern</th>
+              <th className="text-left p-3">Pattern Type</th>
               <th className="text-left p-3">Members</th>
               <th className="text-left p-3">Risk Score</th>
             </tr>

@@ -24,6 +24,13 @@ def calculate_suspicion_score(patterns):
     return min(score, 100)
 
 def main():
+    """MuleRift - Graph-based money muling detection engine.
+    
+    Analyzes transaction CSV to detect:
+    - Cycles in transaction flow (A → B → C → A)
+    - Temporal velocity (rapid pass-through within 72 hours)
+    - Suspicion scores combining structural and temporal signals
+    """
     if len(sys.argv) < 2:
         print(json.dumps({"error": "Usage: python main.py <csv_path>"}), file=sys.stderr)
         sys.exit(1)

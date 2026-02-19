@@ -14,7 +14,7 @@ export default function SummaryStats({ summary }: SummaryStatsProps) {
     <div className="grid grid-cols-4 gap-4 mb-6">
       <div className="bg-white rounded-lg shadow p-6">
         <p className="text-gray-600 text-sm">Total Accounts</p>
-        <p className="text-3xl font-bold text-gray-800">{summary.total_accounts}</p>
+        <p className="text-3xl font-bold text-gray-800">{summary.total_accounts_analyzed}</p>
       </div>
       <div className="bg-white rounded-lg shadow p-6">
         <p className="text-gray-600 text-sm">Suspicious Accounts</p>
