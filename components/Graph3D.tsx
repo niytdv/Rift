@@ -79,7 +79,8 @@ export default function Graph3D({
 
     // Build graph data
     const nodes = filteredAccounts.map((acc) => {
-      const isHighRisk = acc.suspicion_score > 70;
+      const suspicionScore = acc.suspicion_score ?? 0;
+      const isHighRisk = suspicionScore > 70;
       const isInSelectedRing = selectedRingId && acc.ring_id === selectedRingId;
       const isDimmed = selectedRingId && acc.ring_id !== selectedRingId;
 
@@ -94,7 +95,7 @@ export default function Graph3D({
           : isDimmed
           ? "#334155" // Dimmed
           : "#3B82F6", // Blue for normal
-        suspicion_score: acc.suspicion_score,
+        suspicion_score: suspicionScore,
         detected_patterns: acc.detected_patterns,
         ring_id: acc.ring_id,
         opacity: isDimmed ? 0.3 : 1,
@@ -198,7 +199,8 @@ export default function Graph3D({
 
   // Custom node rendering with 3D spheres
   const nodeThreeObject = useCallback((node: any) => {
-    const isHighRisk = node.suspicion_score > 70;
+    const suspicionScore = node.suspicion_score ?? 0;
+    const isHighRisk = suspicionScore > 70;
     const radius = isHighRisk ? 8 : 5;
 
     // Create sphere geometry

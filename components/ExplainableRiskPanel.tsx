@@ -57,7 +57,7 @@ export default function ExplainableRiskPanel({
         <div className="mb-8">
           <div className="flex items-baseline gap-2 mb-2">
             <span className="text-6xl font-bold text-red-500">
-              {Math.round(account.suspicion_score)}%
+              {Math.round(account.suspicion_score ?? 0)}%
             </span>
           </div>
           <p className="text-red-400 text-sm font-semibold tracking-wide">

@@ -26,16 +26,10 @@ export default function AccountModal({ account, onClose }: AccountModalProps) {
             </div>
             <div>
               <p className="text-sm text-gray-600">Suspicion Score</p>
-              <p className={`text-2xl font-bold ${account.suspicion_score > 50 ? "text-red-600" : "text-green-600"}`}>
-                {account.suspicion_score.toFixed(1)}
+              <p className={`text-2xl font-bold ${(account.suspicion_score ?? 0) > 50 ? "text-red-600" : "text-green-600"}`}>
+                {(account.suspicion_score ?? 0).toFixed(1)}
               </p>
             </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Suspicion Score</p>
-            <p className={`text-2xl font-bold ${account.suspicion_score > 50 ? "text-red-600" : "text-green-600"}`}>
-              {account.suspicion_score}
-            </p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Ring ID</p>

@@ -42,7 +42,7 @@ export default function GraphVisualization({ accounts, edges, onNodeClick }: Gra
       .data(accounts)
       .join("circle")
       .attr("r", 8)
-      .attr("fill", (d) => d.suspicion_score > 50 ? "#ef4444" : "#3b82f6")
+      .attr("fill", (d) => (d.suspicion_score ?? 0) > 50 ? "#ef4444" : "#3b82f6")
       .style("cursor", "pointer")
       .on("click", (_, d) => onNodeClick(d.id));
 
