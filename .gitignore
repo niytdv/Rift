@@ -12,5 +12,6 @@ build
 *.json
 !package.json
 !tsconfig.json
+!vercel.json
 .python_packages
 tmp
