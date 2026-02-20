@@ -1,15 +1,20 @@
 #!/bin/bash
 set -e
 
-echo "🐍 Installing Python dependencies to project directory..."
+echo "=== Starting Build Process ==="
+
+echo "Step 1: Installing Python dependencies..."
 mkdir -p .python_packages
 python3 -m pip install --upgrade pip
-python3 -m pip install --target=.python_packages -r python-engine/requirements.txt
+python3 -m pip install --target=.python_packages pandas networkx python-dateutil
 
-echo "📦 Installing Node dependencies..."
+echo "Step 2: Installing Node.js dependencies..."
 npm ci
 
-echo "🏗️  Building Next.js application..."
+echo "Step 3: Building Next.js application..."
 npm run build
 
-echo "✅ Build completed successfully!"
+echo "Step 4: Verifying build..."
+ls -la .next/ || echo "Warning: .next directory not found"
+
+echo "=== Build Complete ==="

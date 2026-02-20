@@ -5,14 +5,18 @@ services:
     region: oregon
     plan: free
     buildCommand: |
-      # Create a local directory for Python packages
+      echo "=== Starting Build Process ==="
+      echo "Step 1: Installing Python dependencies..."
       mkdir -p .python_packages
-      # Install Python dependencies to project directory
       python3 -m pip install --upgrade pip
-      python3 -m pip install --target=.python_packages -r python-engine/requirements.txt
-      # Install Node dependencies and build Next.js
+      python3 -m pip install --target=.python_packages pandas networkx python-dateutil
+      echo "Step 2: Installing Node.js dependencies..."
       npm ci
+      echo "Step 3: Building Next.js application..."
       npm run build
+      echo "Step 4: Verifying build..."
+      ls -la .next/
+      echo "=== Build Complete ==="
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
