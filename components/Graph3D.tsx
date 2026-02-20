@@ -105,10 +105,9 @@ export default function Graph3D({
     const links = filteredEdges
       .filter((edge) => {
         // Only include edges where both nodes exist
-        return (
-          filteredAccounts.some((acc) => acc.account_id === edge.source) &&
-          filteredAccounts.some((acc) => acc.account_id === edge.target)
-        );
+        const hasSource = filteredAccounts.some((acc) => acc.account_id === edge.source);
+        const hasTarget = filteredAccounts.some((acc) => acc.account_id === edge.target);
+        return hasSource && hasTarget;
       })
       .map((edge) => {
         const sourceNode = filteredAccounts.find(
@@ -154,6 +153,13 @@ export default function Graph3D({
         };
       });
 
+    console.log("📊 Graph Data Update:", {
+      nodes: nodes.length,
+      links: links.length,
+      sampleLink: links[0],
+      sampleNode: nodes[0]
+    });
+
     setGraphData({ nodes, links });
   }, [
     accounts,
@@ -168,10 +174,24 @@ export default function Graph3D({
   // Camera centering and force simulation setup
   useEffect(() => {
     if (fgRef.current && graphData.nodes.length > 0) {
+      console.log("🔧 Setting up force simulation with:", {
+        nodes: graphData.nodes.length,
+        links: graphData.links.length
+      });
+      
       // Access the d3-force-3d instance and set center force
       const centerForce = fgRef.current.d3Force('center');
       if (centerForce) {
         centerForce.x(0).y(0).z(0);
+      }
+      
+      // Explicitly set link force
+      const linkForce = fgRef.current.d3Force('link');
+      if (linkForce) {
+        linkForce.distance(100).strength(1);
+        console.log("✅ Link force configured");
+      } else {
+        console.warn("⚠️ Link force not found!");
       }
       
       // Position camera to look at center
@@ -241,9 +261,13 @@ export default function Graph3D({
         nodeThreeObject={nodeThreeObject}
         nodeColor={(node: any) => node.color}
         nodeRelSize={6}
+        linkSource="source"
+        linkTarget="target"
         linkColor={(link: any) => link.color}
         linkOpacity={(link: any) => link.opacity || 0.8}
-        linkWidth={(link: any) => link.width || 1}
+        linkWidth={(link: any) => link.width || 2}
+        linkDirectionalArrowLength={3.5}
+        linkDirectionalArrowRelPos={1}
         linkDirectionalParticles={4}
         linkDirectionalParticleSpeed={0.01}
         linkDirectionalParticleWidth={3}

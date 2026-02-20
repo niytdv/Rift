@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Search, Download, Upload } from "lucide-react";
+import { useState } from "react";
+import { Search, Download } from "lucide-react";
 import { AnalysisResult, SuspiciousAccount } from "@/lib/types";
 import GraphDisplayCard from "./GraphDisplayCard";
 import ExplainableRiskPanel from "./ExplainableRiskPanel";
@@ -21,51 +21,18 @@ interface Dashboard3DProps {
 }
 
 export default function Dashboard3D({ data, edges }: Dashboard3DProps) {
+  console.log("🎯 Dashboard3D received:", {
+    accounts: data.suspicious_accounts?.length,
+    rings: data.fraud_rings?.length,
+    edges: edges.length,
+    sampleEdge: edges[0]
+  });
+  
   const [selectedAccount, setSelectedAccount] = useState<SuspiciousAccount | null>(null);
   const [selectedRingId, setSelectedRingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [hideWhitelisted, setHideWhitelisted] = useState(false);
   const [timeVelocityFilter, setTimeVelocityFilter] = useState(72);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Analysis failed");
-      }
-
-      const result = await response.json();
-      
-      // Reload the page with new data
-      window.location.reload();
-    } catch (error) {
-      console.error("Upload error:", error);
-      alert("Failed to analyze CSV file. Please try again.");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
 
   const handleDownloadJSON = () => {
     const dataStr = JSON.stringify(data, null, 2);
@@ -109,23 +76,6 @@ export default function Dashboard3D({ data, edges }: Dashboard3DProps) {
                   </h1>
                 </div>
                 <div className="flex items-center gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={handleUploadClick}
-                    disabled={isUploading}
-                    className="flex items-center gap-2 px-4 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-colors backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Upload size={16} className="text-cyan-400" />
-                    <span className="text-sm text-cyan-400">
-                      {isUploading ? "UPLOADING..." : "UPLOAD CSV"}
-                    </span>
-                  </button>
                   <button
                     onClick={handleDownloadJSON}
                     className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/20 rounded-xl transition-colors backdrop-blur-sm"
